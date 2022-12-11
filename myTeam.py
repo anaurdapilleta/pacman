@@ -63,6 +63,9 @@ class ReflexCaptureAgent(CaptureAgent):
     def __init__(self, index, time_for_computing=.1):
         super().__init__(index, time_for_computing)
         self.start = None
+        self.ourScore = 0
+        self.lastScore = 0
+        self.blocked = 0
 
     def register_initial_state(self, game_state):
         self.start = game_state.get_agent_position(self.index)
@@ -81,18 +84,39 @@ class ReflexCaptureAgent(CaptureAgent):
 
         max_value = max(values)
         best_actions = [a for a, v in zip(actions, values) if v == max_value]
-
-        if (self.get_score(game_state) == 0):
+        
+        if self.lastScore < self.get_score(game_state): #if the team has come back to its field with some food
+        	self.ourScore += self.get_score(game_state) - self.lastScore # add the difference of last and current score
+        	self.blocked = 0 # restart variable for counting if blocked
+        self.lastScore = self.get_score(game_state) #always update last score (whether score the same, blue team gets food, red team gets food)
+        
+        		
+        # When Pacman has 4 foods it will return to its field
+        if (self.ourScore == 0):
         	food_left = len(self.get_food(game_state).as_list())
-        elif (self.get_score(game_state) == 5):
-        	food_left = len(self.get_food(game_state).as_list()) + 5
-        elif (self.get_score(game_state) == 10):
-        	food_left = len(self.get_food(game_state).as_list()) + 10
-        elif (self.get_score(game_state) == 15):
-        	food_left = len(self.get_food(game_state).as_list()) + 13
+        elif (self.ourScore == 4):
+        	food_left = len(self.get_food(game_state).as_list()) + 4
+        elif (self.ourScore == 8):
+        	food_left = len(self.get_food(game_state).as_list()) + 8
+        elif (self.ourScore == 12):
+        	food_left = len(self.get_food(game_state).as_list()) + 12
+        elif (self.ourScore == 16):
+        	food_left = len(self.get_food(game_state).as_list()) + 14
+        else:
+        	food_left = len(self.get_food(game_state).as_list()) + 20
         	
-        if self.index == 0:
-        	if food_left <= 15:
+        
+        	        	
+        if self.index == 0 or self.index == 1: #offensive
+        	
+        	if food_left <=16:
+        		self.blocked += 1
+        	else:
+        		self.blocked = 0
+        	if self.blocked > 20: # if more than 20 moves with <=16 food_left, it is probably blocked
+        		food_left = food_left + 4
+        	
+        	if food_left <= 16: # return to the field with food
         		best_dist = 9999
         		best_action = None
         		for action in actions:
@@ -105,7 +129,7 @@ class ReflexCaptureAgent(CaptureAgent):
         		return best_action
         	enemies = [game_state.get_agent_state(i) for i in self.get_opponents(game_state)]
         	ghosts = [a for a in enemies if not a.is_pacman and a.get_position() is not None]
-        	if len(ghosts) > 0:  # This should always be True,  but better safe than sorry
+        	if len(ghosts) > 0: # try to avoid ghosts
         		best_dist = -9999
         		best_action = None
         		ghost = ghosts[0]
@@ -119,11 +143,11 @@ class ReflexCaptureAgent(CaptureAgent):
         		return best_action
         	else:
         		return random.choice(best_actions)
-        else:
+        else: # defensive
         	enemies = [game_state.get_agent_state(i) for i in self.get_opponents(game_state)]
         	invaders = [a for a in enemies if a.is_pacman and a.get_position() is not None]
         	
-        	if (len(invaders)>0):
+        	if (len(invaders)>0): # go after pacman
         		invader = invaders[0]
         		best_dist = 9999
         		best_action = None
@@ -195,7 +219,7 @@ class OffensiveReflexAgent(ReflexCaptureAgent):
         score = 0
         features['num_ghosts'] = len(ghosts)
         
-        if len(ghosts) > 0:  # This should always be True,  but better safe than sorry
+        if len(ghosts) > 0:
             
             min_distance_ghost = min([self.get_maze_distance(my_pos, ghost.get_position()) for ghost in ghosts])
             features['distance_to_ghosts'] = min_distance_ghost
@@ -206,7 +230,7 @@ class OffensiveReflexAgent(ReflexCaptureAgent):
         
         # Compute distance to the nearest food
 
-        if len(food_list) > 0:  # This should always be True,  but better safe than sorry
+        if len(food_list) > 0:
             
             min_distance_food = min([self.get_maze_distance(my_pos, food) for food in food_list])
             features['distance_to_food'] = min_distance_food
